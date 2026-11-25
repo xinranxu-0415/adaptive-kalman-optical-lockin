@@ -1,0 +1,3248 @@
+[
+  {
+    "listing": 1,
+    "line": 1,
+    "text": "// 16-722 final project: recorder (lock-in test signals + noise LED)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 2,
+    "text": "//",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 3,
+    "text": "// Wiring (same as Lab 3):",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 4,
+    "text": "//   D9  -> 220 ohm -> red LED   (signal, far from the LDR)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 5,
+    "text": "//   D10 -> 220 ohm -> white LED (noise, close to the LDR)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 6,
+    "text": "//   A0  <- LDR / 10k divider",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 7,
+    "text": "//",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 8,
+    "text": "// The PC sends ONE character to start a run:",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 9,
+    "text": "//   K = calibration: white LED steady at WHITE_FIXED, red steps 0,50,100,150,200,255 (15 s each) -> 90 s",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 10,
+    "text": "//   N = noise run:   red fixed at 150, white LED noise on                                          -> 60 s",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 11,
+    "text": "//   1 = large steps   2 = small steps   3 = triangle ramp   4 = slow sine   5 = random walk",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 12,
+    "text": "//       (white LED noise on)                                                                      -> 60 seach",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 13,
+    "text": "//",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 14,
+    "text": "// Output, one CSV line every 5 ms (200 Hz), same format as Lab 3:",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 15,
+    "text": "//   ms, adc8, ref, level, noise",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 16,
+    "text": "//   adc8 = sum of 8 readings of A0 (divide by 8 to get 0..1023)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 17,
+    "text": "//   ref  = +1/-1 carrier reference (2 Hz square wave)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 18,
+    "text": "//   level= commanded red LED amplitude (PWM 0..255)  -> ground truth after calibration",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 19,
+    "text": "//   noise= commanded white LED PWM",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 20,
+    "text": "",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 21,
+    "text": "const uint8_t SIG = 9;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 22,
+    "text": "const uint8_t NOI = 10;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 23,
+    "text": "const uint8_t DET = A0;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 24,
+    "text": "",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 25,
+    "text": "const unsigned long TS_US = 5000;            // 200 Hz",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 26,
+    "text": "const unsigned long CARRIER_HALF_MS = 250;   // 2 Hz carrier",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 27,
+    "text": "const unsigned long WARMUP_MS = 3000;        // run but do not record",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 28,
+    "text": "const unsigned long NOISE_UPDATE_MS = 40;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 29,
+    "text": "",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 30,
+    "text": "// White-LED noise settings (narrow range chosen from the operating-point sweep)",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 31,
+    "text": "const int WHITE_FIXED = 30;                  // steady white level in calibration run K",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 32,
+    "text": "const int RW_MIN = 20;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 33,
+    "text": "const int RW_MAX = 40;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 34,
+    "text": "const int RW_STEP = 2;                       // random-walk step per update",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 35,
+    "text": "const int WHITE_AMP = 5;                     // fast flicker, +/- this much",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 36,
+    "text": "",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 37,
+    "text": "unsigned long durationMs(char m) { return (m == 'K') ? 90000UL : 60000UL; }",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 38,
+    "text": "",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 39,
+    "text": "int stepLevel(const int *L, unsigned long t, unsigned long stepMs, int n) {",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 40,
+    "text": "  unsigned long k = t / stepMs;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 41,
+    "text": "  if (k >= (unsigned long)n) k = n - 1;",
+    "pdf_page": 14
+  },
+  {
+    "listing": 1,
+    "line": 42,
+    "text": "  return L[k];",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 43,
+    "text": "}",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 44,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 45,
+    "text": "int levelAt(char m, unsigned long t, int walk) {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 46,
+    "text": "  static const int LK[6] = {0, 50, 100, 150, 200, 255};",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 47,
+    "text": "  static const int L1[6] = {60, 255, 60, 255, 150, 60};",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 48,
+    "text": "  static const int L2[6] = {120, 160, 200, 160, 120, 80};",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 49,
+    "text": "  switch (m) {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 50,
+    "text": "    case 'K': return stepLevel(LK, t, 15000UL, 6);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 51,
+    "text": "    case 'N': return 150;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 52,
+    "text": "    case '1': return stepLevel(L1, t, 10000UL, 6);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 53,
+    "text": "    case '2': return stepLevel(L2, t, 10000UL, 6);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 54,
+    "text": "    case '3': {                               // triangle: 50 -> 255 -> 50 over 60 s",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 55,
+    "text": "      float x = (float)t / 60000.0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 56,
+    "text": "      float tri = 1.0 - fabs(2.0 * x - 1.0);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 57,
+    "text": "      return (int)(50 + 205 * tri);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 58,
+    "text": "    }",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 59,
+    "text": "    case '4': return (int)(152 + 100 * sin(2 * PI * (float)t / 20000.0));  // 20 s period",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 60,
+    "text": "    case '5': return walk;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 61,
+    "text": "  }",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 62,
+    "text": "  return 0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 63,
+    "text": "}",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 64,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 65,
+    "text": "void setup() {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 66,
+    "text": "  Serial.begin(115200);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 67,
+    "text": "  pinMode(SIG, OUTPUT);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 68,
+    "text": "  pinMode(NOI, OUTPUT);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 69,
+    "text": "  analogWrite(SIG, 0);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 70,
+    "text": "  analogWrite(NOI, 0);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 71,
+    "text": "  randomSeed(analogRead(A5));",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 72,
+    "text": "  Serial.println(\"# READY\");",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 73,
+    "text": "}",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 74,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 75,
+    "text": "void loop() {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 76,
+    "text": "  if (Serial.available()) {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 77,
+    "text": "    char c = Serial.read();",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 78,
+    "text": "    if (c == 'K' || c == 'N' || (c >= '1' && c <= '5')) runExperiment(c);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 79,
+    "text": "  }",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 80,
+    "text": "}",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 81,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 82,
+    "text": "void runExperiment(char mode) {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 83,
+    "text": "  const unsigned long total_ms = WARMUP_MS + durationMs(mode);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 84,
+    "text": "  Serial.print(\"# MODE \");",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 85,
+    "text": "  Serial.println(mode);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 86,
+    "text": "  Serial.println(\"ms,adc8,ref,level,noise\");",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 87,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 88,
+    "text": "  unsigned long t0 = millis();",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 89,
+    "text": "  unsigned long next_us = micros();",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 90,
+    "text": "  unsigned long next_noise_ms = 0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 91,
+    "text": "  unsigned long next_walk_ms = WARMUP_MS;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 92,
+    "text": "  int noise_level = 0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 93,
+    "text": "  int rw = 30;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 94,
+    "text": "  int walk = 150;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 95,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 96,
+    "text": "  while (true) {",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 97,
+    "text": "    unsigned long t = millis() - t0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 98,
+    "text": "    if (t >= total_ms) break;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 99,
+    "text": "    unsigned long t_rec = (t > WARMUP_MS) ? (t - WARMUP_MS) : 0;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 100,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 101,
+    "text": "    if (t >= next_walk_ms) {                  // random walk of the red level (mode 5)",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 102,
+    "text": "      walk += random(-20, 21);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 103,
+    "text": "      walk = constrain(walk, 40, 255);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 104,
+    "text": "      next_walk_ms = t + 500;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 105,
+    "text": "    }",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 106,
+    "text": "    int level = constrain(levelAt(mode, t_rec, walk), 0, 255);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 107,
+    "text": "",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 108,
+    "text": "    int8_t ref = ((t / CARRIER_HALF_MS) % 2 == 0) ? 1 : -1;",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 109,
+    "text": "    analogWrite(SIG, (ref > 0) ? level : 0);",
+    "pdf_page": 15
+  },
+  {
+    "listing": 1,
+    "line": 110,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 111,
+    "text": "    if (mode == 'K') {",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 112,
+    "text": "      noise_level = WHITE_FIXED;",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 113,
+    "text": "      analogWrite(NOI, noise_level);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 114,
+    "text": "    } else if (t >= next_noise_ms) {",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 115,
+    "text": "      rw += random(-RW_STEP, RW_STEP + 1);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 116,
+    "text": "      rw = constrain(rw, RW_MIN, RW_MAX);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 117,
+    "text": "      int v = rw + random(-WHITE_AMP, WHITE_AMP + 1);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 118,
+    "text": "      noise_level = constrain(v, 0, 255);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 119,
+    "text": "      analogWrite(NOI, noise_level);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 120,
+    "text": "      next_noise_ms = t + NOISE_UPDATE_MS;",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 121,
+    "text": "    }",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 122,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 123,
+    "text": "    next_us += TS_US;",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 124,
+    "text": "    while ((long)(micros() - next_us) < 0) { }",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 125,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 126,
+    "text": "    unsigned int sum = 0;",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 127,
+    "text": "    for (uint8_t i = 0; i < 8; i++) sum += analogRead(DET);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 128,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 129,
+    "text": "    if (t >= WARMUP_MS) {",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 130,
+    "text": "      Serial.print(t - WARMUP_MS); Serial.print(',');",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 131,
+    "text": "      Serial.print(sum); Serial.print(',');",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 132,
+    "text": "      Serial.print((int)ref); Serial.print(',');",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 133,
+    "text": "      Serial.print(level); Serial.print(',');",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 134,
+    "text": "      Serial.println(noise_level);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 135,
+    "text": "    }",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 136,
+    "text": "  }",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 137,
+    "text": "  analogWrite(SIG, 0);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 138,
+    "text": "  analogWrite(NOI, 0);",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 139,
+    "text": "  Serial.println(\"# DONE\");",
+    "pdf_page": 16
+  },
+  {
+    "listing": 1,
+    "line": 140,
+    "text": "}",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 1,
+    "text": "#!/usr/bin/env python3",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 2,
+    "text": "\"\"\"Run ALL final-project recordings automatically, one after another.",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 3,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 4,
+    "text": "Usage (close the Arduino Serial Monitor first!):",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 5,
+    "text": "    caffeinate -i python3 run_all.py",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 6,
+    "text": "Takes about 25 minutes. Do not touch the box or the cables while it runs.",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 7,
+    "text": "Data go to a new folder  data_YYYYMMDD_HHMM/  next to this script.",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 8,
+    "text": "\"\"\"",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 9,
+    "text": "import glob",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 10,
+    "text": "import os",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 11,
+    "text": "import sys",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 12,
+    "text": "import time",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 13,
+    "text": "import datetime",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 14,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 15,
+    "text": "import serial",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 16,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 17,
+    "text": "# (mode, tag).  K = calibration, N = noise, 1..5 = dynamic signals",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 18,
+    "text": "PLAN = [(\"K\", \"pre\"), (\"N\", \"1\"), (\"N\", \"2\")]",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 19,
+    "text": "PLAN += [(m, f\"r{r}\") for r in (1, 2, 3) for m in \"12345\"]",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 20,
+    "text": "PLAN += [(\"K\", \"post\")]",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 21,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 22,
+    "text": "DURATION_S = {\"K\": 90}          # all other modes: 60 s",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 23,
+    "text": "DEFAULT_S = 60",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 24,
+    "text": "SAMPLE_HZ = 200",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 25,
+    "text": "REST_S = 8                      # pause between runs (LDR recovers, LEDs off)",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 26,
+    "text": "NAMES = {\"K\": \"calibration\", \"N\": \"noise\", \"1\": \"large steps\", \"2\": \"small steps\",",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 27,
+    "text": "         \"3\": \"ramp\", \"4\": \"slow sine\", \"5\": \"random walk\"}",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 28,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 29,
+    "text": "",
+    "pdf_page": 16
+  },
+  {
+    "listing": 2,
+    "line": 30,
+    "text": "def dur(mode):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 31,
+    "text": "    return DURATION_S.get(mode, DEFAULT_S)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 32,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 33,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 34,
+    "text": "def find_port():",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 35,
+    "text": "    ports = sorted(glob.glob(\"/dev/cu.usbmodem*\") + glob.glob(\"/dev/cu.usbserial*\"))",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 36,
+    "text": "    if not ports:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 37,
+    "text": "        sys.exit(\"No Arduino port found (/dev/cu.usbmodem* or /dev/cu.usbserial*). \"",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 38,
+    "text": "                 \"Is the USB cable plugged in? Is the Serial Monitor closed?\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 39,
+    "text": "    return ports[0]",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 40,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 41,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 42,
+    "text": "def one_run(ser, mode, path):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 43,
+    "text": "    \"\"\"Start one run, save CSV, return (ok, n_samples, a0_min, a0_mean, a0_max).\"\"\"",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 44,
+    "text": "    ser.reset_input_buffer()",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 45,
+    "text": "    ser.write(mode.encode())",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 46,
+    "text": "    t_start = time.time()",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 47,
+    "text": "    limit = dur(mode) + 20",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 48,
+    "text": "    n, done = 0, False",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 49,
+    "text": "    vals = []",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 50,
+    "text": "    with open(path, \"w\") as f:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 51,
+    "text": "        while time.time() - t_start < limit:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 52,
+    "text": "            line = ser.readline().decode(errors=\"ignore\").strip()",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 53,
+    "text": "            if not line:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 54,
+    "text": "                continue",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 55,
+    "text": "            if line.startswith(\"# DONE\"):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 56,
+    "text": "                done = True",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 57,
+    "text": "                break",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 58,
+    "text": "            if line.startswith(\"#\"):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 59,
+    "text": "                continue",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 60,
+    "text": "            f.write(line + \"\\n\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 61,
+    "text": "            if not line.startswith(\"ms\"):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 62,
+    "text": "                n += 1",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 63,
+    "text": "                try:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 64,
+    "text": "                    vals.append(int(line.split(\",\")[1]) / 8.0)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 65,
+    "text": "                except (IndexError, ValueError):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 66,
+    "text": "                    pass",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 67,
+    "text": "    expected = dur(mode) * SAMPLE_HZ",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 68,
+    "text": "    ok = done and n >= 0.95 * expected",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 69,
+    "text": "    if vals:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 70,
+    "text": "        return ok, n, min(vals), sum(vals) / len(vals), max(vals)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 71,
+    "text": "    return ok, n, float(\"nan\"), float(\"nan\"), float(\"nan\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 72,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 73,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 74,
+    "text": "def main():",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 75,
+    "text": "    port = find_port()",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 76,
+    "text": "    total = sum(dur(m) + 3 + REST_S for m, _ in PLAN)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 77,
+    "text": "    print(f\"Port: {port}\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 78,
+    "text": "    print(f\"{len(PLAN)} runs, about {total / 60:.0f} minutes. Do not touch the box!\\n\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 79,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 80,
+    "text": "    outdir = \"data_\" + datetime.datetime.now().strftime(\"%Y%m%d_%H%M\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 81,
+    "text": "    os.makedirs(outdir, exist_ok=True)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 82,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 83,
+    "text": "    ser = serial.Serial(port, 115200, timeout=1)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 84,
+    "text": "    t0 = time.time()",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 85,
+    "text": "    ready = False",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 86,
+    "text": "    while time.time() - t0 < 10:               # opening the port resets the Mega",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 87,
+    "text": "        if ser.readline().decode(errors=\"ignore\").strip().startswith(\"# READY\"):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 88,
+    "text": "            ready = True",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 89,
+    "text": "            break",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 90,
+    "text": "    if not ready:",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 91,
+    "text": "        print(\"Did not see '# READY' (is final_recorder.ino uploaded?). Continuing anyway.\")",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 92,
+    "text": "",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 93,
+    "text": "    summary = []",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 94,
+    "text": "    for i, (mode, tag) in enumerate(PLAN, 1):",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 95,
+    "text": "        name = f\"run_{mode}_{tag}.csv\"",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 96,
+    "text": "        path = os.path.join(outdir, name)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 97,
+    "text": "        print(f\"[{i}/{len(PLAN)}] {name}  ({NAMES[mode]}, {dur(mode)} s) ...\", flush=True)",
+    "pdf_page": 17
+  },
+  {
+    "listing": 2,
+    "line": 98,
+    "text": "        res = one_run(ser, mode, path)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 99,
+    "text": "        if not res[0]:",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 100,
+    "text": "            print(\"   run incomplete, repeating once ...\", flush=True)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 101,
+    "text": "            time.sleep(REST_S)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 102,
+    "text": "            res = one_run(ser, mode, path)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 103,
+    "text": "        ok, n, lo, mean, hi = res",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 104,
+    "text": "        status = \"OK\" if ok else \"PROBLEM\"",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 105,
+    "text": "        line = f\"{name:18s} {status:8s} samples={n:6d}  A0 min/mean/max = {lo:.0f}/{mean:.0f}/{hi:.0f}\"",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 106,
+    "text": "        print(\"   \" + line, flush=True)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 107,
+    "text": "        summary.append(line)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 108,
+    "text": "        time.sleep(REST_S)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 109,
+    "text": "    ser.close()",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 110,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 111,
+    "text": "    with open(os.path.join(outdir, \"summary.txt\"), \"w\") as f:",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 112,
+    "text": "        f.write(\"\\n\".join(summary) + \"\\n\")",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 113,
+    "text": "    print(\"\\nALL DONE. Files are in:\", outdir)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 114,
+    "text": "    print(\"\\n\".join(summary))",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 115,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 116,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 117,
+    "text": "if __name__ == \"__main__\":",
+    "pdf_page": 18
+  },
+  {
+    "listing": 2,
+    "line": 118,
+    "text": "    main()",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 1,
+    "text": "import numpy as np, glob, os",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 2,
+    "text": "D='data_20261123_0015/'",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 3,
+    "text": "def load(name):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 4,
+    "text": "    d=np.genfromtxt(D+name,delimiter=',',skip_header=1)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 5,
+    "text": "    t=d[:,0]/1000.0; y=d[:,1]/8.0; ref=d[:,2]; lvl=d[:,3]; noi=d[:,4]",
+    "pdf_page": 18
+  },
+  {
+    "listing": 3,
+    "line": 6,
+    "text": "    return t,y,ref,lvl,noi",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 1,
+    "text": "import numpy as np",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 2,
+    "text": "from scipy import signal",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 3,
+    "text": "from load import load",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 4,
+    "text": "FS=200.0; DT=1/FS",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 5,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 6,
+    "text": "def sos_lp(fc,order=2): return signal.butter(order,fc,fs=FS,output='sos')",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 7,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 8,
+    "text": "def hp_causal(y,fc=0.7):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 9,
+    "text": "    b=signal.sosfilt(sos_lp(fc),y-y[:200].mean())  # remove offset to limit start transient",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 10,
+    "text": "    return (y-y[:200].mean())-b",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 11,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 12,
+    "text": "def delay(ref,lag_s):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 13,
+    "text": "    n=int(round(lag_s*FS))",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 14,
+    "text": "    out=np.empty_like(ref); out[:n]=ref[0]; out[n:]=ref[:-n] if n>0 else ref",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 15,
+    "text": "    return out",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 16,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 17,
+    "text": "def est_lag(y,ref,lags=np.arange(0,0.25,0.005)):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 18,
+    "text": "    h=hp_causal(y)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 19,
+    "text": "    sc=[]",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 20,
+    "text": "    for L in lags:",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 21,
+    "text": "        sc.append(np.mean(h[400:]*delay(ref,L)[400:]))",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 22,
+    "text": "    sc=np.array(sc); return lags[np.argmax(sc)],lags,sc",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 23,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 24,
+    "text": "def demod(y,ref,lag):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 25,
+    "text": "    return hp_causal(y)*delay(ref,lag)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 26,
+    "text": "",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 27,
+    "text": "LAG=0.015",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 28,
+    "text": "def calib_map(name='run_K_pre.csv',tskip=3.0):",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 29,
+    "text": "    \"\"\"steady-state mean of demod output (after 0.1 Hz LP is replaced by plain mean) per commanded level\"\"\"",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 30,
+    "text": "    t,y,ref,lvl,noi=load(name)",
+    "pdf_page": 18
+  },
+  {
+    "listing": 4,
+    "line": 31,
+    "text": "    x=demod(y,ref,LAG)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 32,
+    "text": "    Ls=[];As=[]",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 33,
+    "text": "    for L in np.unique(lvl):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 34,
+    "text": "        m=(lvl==L)&((t-t[lvl==L][0])>tskip)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 35,
+    "text": "        Ls.append(L);As.append(x[m].mean())",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 36,
+    "text": "    return np.array(Ls),np.array(As)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 37,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 38,
+    "text": "def truth_from_level(lvl,Ls,As):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 39,
+    "text": "    # smooth monotone map commanded level -> demod DC (counts); quadratic fit through origin-ish",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 40,
+    "text": "    p=np.polyfit(Ls,As,2)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 41,
+    "text": "    return np.polyval(p,lvl)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 42,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 43,
+    "text": "# ---------- estimators (all operate on demod signal x at 200 Hz) ----------",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 44,
+    "text": "def lp_causal(x,fc,order=2):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 45,
+    "text": "    sos=sos_lp(fc,order); return signal.sosfilt(sos,x,zi=signal.sosfilt_zi(sos)*x[:200].mean())[0]",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 46,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 47,
+    "text": "def lp_zerophase(x,fc=0.1,order=2):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 48,
+    "text": "    return signal.sosfiltfilt(sos_lp(fc,order),x)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 49,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 50,
+    "text": "def kalman(x,q,R,qfun=None,x0=None):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 51,
+    "text": "    \"\"\"2-state (a, adot) constant-velocity KF. q = process PSD of acceleration noise (counts^2/s^3).",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 52,
+    "text": "    qfun(k, nu, S) -> multiplier on q (adaptive).\"\"\"",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 53,
+    "text": "    n=len(x); a=np.zeros(n); P=np.array([[10.,0],[0,1.]])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 54,
+    "text": "    s=np.array([x[:200].mean() if x0 is None else x0,0.0])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 55,
+    "text": "    F=np.array([[1,DT],[0,1]]); H=np.array([1.,0.])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 56,
+    "text": "    Q0=np.array([[DT**3/3,DT**2/2],[DT**2/2,DT]])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 57,
+    "text": "    qs=np.zeros(n)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 58,
+    "text": "    for k in range(n):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 59,
+    "text": "        qm=1.0 if qfun is None else qfun.step()",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 60,
+    "text": "        Q=Q0*q*qm",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 61,
+    "text": "        s=F@s; P=F@P@F.T+Q",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 62,
+    "text": "        nu=x[k]-s[0]; S=P[0,0]+R",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 63,
+    "text": "        if qfun is not None: qfun.update(nu,S)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 64,
+    "text": "        K=P@H/S",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 65,
+    "text": "        s=s+K*nu; P=P-np.outer(K,H@P)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 66,
+    "text": "        a[k]=s[0]; qs[k]=qm",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 67,
+    "text": "    return a,qs",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 68,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 69,
+    "text": "class AdaptQ:",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 70,
+    "text": "    \"\"\"raise q when the smoothed innovation is persistently biased (signal changed), relax otherwise.",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 71,
+    "text": "    z = |EMA(nu)| / sigma_nu0 ; multiplier = exp(log(qmax_ratio)*clip((z-z0)/(z1-z0),0,1)) ; fast attack, slowdecay\"\"\"",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 72,
+    "text": "    def __init__(self,sig0,tau_e=0.4,z0=1.0,z1=4.0,ratio=300.,tau_dec=1.0):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 73,
+    "text": "        self.sig0=sig0;self.ae=DT/tau_e;self.z0=z0;self.z1=z1;self.ratio=ratio;self.ad=DT/tau_dec",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 74,
+    "text": "        self.e=0.0;self.m=1.0;self.lm=0.0",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 75,
+    "text": "    def update(self,nu,S):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 76,
+    "text": "        self.e+=self.ae*(nu-self.e)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 77,
+    "text": "        z=abs(self.e)/self.sig0",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 78,
+    "text": "        target=np.log(self.ratio)*min(max((z-self.z0)/(self.z1-self.z0),0),1)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 79,
+    "text": "        if target>self.lm: self.lm=target           # attack immediately",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 80,
+    "text": "        else: self.lm+=self.ad*(target-self.lm)      # decay slowly",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 81,
+    "text": "        self.m=np.exp(self.lm)",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 82,
+    "text": "    def step(self): return self.m",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 83,
+    "text": "",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 84,
+    "text": "# ---------- Rauch-Tung-Striebel smoother (fixed q, non-causal) ----------",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 85,
+    "text": "def rts(x,q,R):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 86,
+    "text": "    n=len(x); F=np.array([[1,DT],[0,1.]]); H=np.array([1.,0]); Q=q*np.array([[DT**3/3,DT**2/2],[DT**2/2,DT]])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 87,
+    "text": "    s=np.array([x[:200].mean(),0.]); P=np.diag([10.,1.])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 88,
+    "text": "    sp=np.zeros((n,2));Pp=np.zeros((n,2,2));sf=np.zeros((n,2));Pf=np.zeros((n,2,2))",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 89,
+    "text": "    for k in range(n):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 90,
+    "text": "        s=F@s;P=F@P@F.T+Q; sp[k]=s;Pp[k]=P",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 91,
+    "text": "        S=P[0,0]+R;K=P@H/S; s=s+K*(x[k]-s[0]); P=P-np.outer(K,H@P); sf[k]=s;Pf[k]=P",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 92,
+    "text": "    ss=sf.copy()",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 93,
+    "text": "    for k in range(n-2,-1,-1):",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 94,
+    "text": "        M=Pp[k+1]; det=M[0,0]*M[1,1]-M[0,1]*M[1,0]; Mi=np.array([[M[1,1],-M[0,1]],[-M[1,0],M[0,0]]])/det; C=Pf[k]@F.T@Mi; ss[k]=sf[k]+C@(ss[k+1]-sp[k+1])",
+    "pdf_page": 19
+  },
+  {
+    "listing": 4,
+    "line": 95,
+    "text": "    return ss[:,0]",
+    "pdf_page": 19
+  },
+  {
+    "listing": 5,
+    "line": 1,
+    "text": "import numpy as np, sys",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 2,
+    "text": "sys.path.insert(0,'.')",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 3,
+    "text": "from pipe import *",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 4,
+    "text": "LS,AS=calib_map('run_K_pre.csv')",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 5,
+    "text": "PCOEF=np.polyfit(LS,AS,2)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 6,
+    "text": "def truth(lvl): return np.polyval(PCOEF,lvl)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 7,
+    "text": "_cache={}",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 8,
+    "text": "def get(name):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 9,
+    "text": "    if name not in _cache:",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 10,
+    "text": "        t,y,ref,lvl,noi=load(name); x=demod(y,ref,LAG)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 11,
+    "text": "        _cache[name]=(t,x,truth(lvl),lvl)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 12,
+    "text": "    return _cache[name]",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 13,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 14,
+    "text": "R_KF=14.0**2   # raw demod variance (measured on N_1, N_2: std ~14-15.7)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 15,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 16,
+    "text": "def run_est(kind,x,**p):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 17,
+    "text": "    if kind=='zp': return lp_zerophase(x,p.get('fc',0.1)),None",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 18,
+    "text": "    if kind=='lp': return lp_causal(x,p['fc']),None",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 19,
+    "text": "    if kind=='kf': return kalman(x,p['q'],R_KF)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 20,
+    "text": "    if kind=='rts': return rts(x,p['q'],R_KF),None",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 21,
+    "text": "    if kind=='akf':",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 22,
+    "text": "        ad=AdaptQ(p['sig0'],p.get('tau_e',0.4),p.get('z0',1.0),p.get('z1',4.0),p.get('ratio',300.),p.get('tau_dec',1.0))",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 23,
+    "text": "        return kalman(x,p['q'],R_KF,qfun=ad)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 24,
+    "text": "    raise ValueError",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 25,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 26,
+    "text": "def noise_sigma(kind,names=('run_N_1.csv',),tskip=10.0,**p):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 27,
+    "text": "    out=[]",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 28,
+    "text": "    for n in names:",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 29,
+    "text": "        t,x,tr,lvl=get(n); a,_=run_est(kind,x,**p); m=t>tskip",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 30,
+    "text": "        out.append(a[m].std())",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 31,
+    "text": "    return float(np.mean(out))",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 32,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 33,
+    "text": "def step_events(lvl,t,min_jump=40):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 34,
+    "text": "    idx=np.where(np.abs(np.diff(lvl))>=min_jump)[0]+1",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 35,
+    "text": "    return idx",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 36,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 37,
+    "text": "def step_response(kind,names,pre=3.0,post=9.0,**p):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 38,
+    "text": "    \"\"\"ensemble-average normalised step response (up and down steps, sign-normalised).\"\"\"",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 39,
+    "text": "    n_pre=int(pre*FS); n_post=int(post*FS); resp=[]",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 40,
+    "text": "    for n in names:",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 41,
+    "text": "        t,x,tr,lvl=get(n); a,_=run_est(kind,x,**p)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 42,
+    "text": "        for i in step_events(lvl,t):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 43,
+    "text": "            if i-n_pre<0 or i+n_post>len(a): continue",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 44,
+    "text": "            before=a[i-int(1.0*FS):i].mean(); target=tr[i+int(3*FS)]  # truth after step (constant within segment)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 45,
+    "text": "            tb=tr[i-int(1.0*FS)]; step=target-tb",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 46,
+    "text": "            if abs(step)<3: continue",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 47,
+    "text": "            r=(a[i-n_pre:i+n_post]-tb)/step",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 48,
+    "text": "            resp.append(r)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 49,
+    "text": "    resp=np.array(resp); return resp.mean(0),resp",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 50,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 51,
+    "text": "def t90(r,pre=3.0):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 52,
+    "text": "    k0=int(pre*FS); lo=0.1;hi=0.9",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 53,
+    "text": "    r=r[k0:]",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 54,
+    "text": "    ihi=np.argmax(r>=hi) if (r>=hi).any() else len(r)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 55,
+    "text": "    ilo=np.argmax(r>=lo) if (r>=lo).any() else 0",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 56,
+    "text": "    return (ihi)/FS, (ihi-ilo)/FS",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 57,
+    "text": "def overshoot(r,pre=3.0):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 58,
+    "text": "    k0=int(pre*FS); return max(r[k0:].max()-1.0,0.0)",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 59,
+    "text": "",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 60,
+    "text": "def rmse(kind,names,tskip=5.0,**p):",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 61,
+    "text": "    out=[]",
+    "pdf_page": 20
+  },
+  {
+    "listing": 5,
+    "line": 62,
+    "text": "    for n in names:",
+    "pdf_page": 21
+  },
+  {
+    "listing": 5,
+    "line": 63,
+    "text": "        t,x,tr,lvl=get(n); a,_=run_est(kind,x,**p); m=t>tskip",
+    "pdf_page": 21
+  },
+  {
+    "listing": 5,
+    "line": 64,
+    "text": "        out.append(np.sqrt(np.mean((a[m]-tr[m])**2)))",
+    "pdf_page": 21
+  },
+  {
+    "listing": 5,
+    "line": 65,
+    "text": "    return float(np.mean(out))",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 1,
+    "text": "import sys,json,pickle; sys.path.insert(0,'.')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 2,
+    "text": "from evalx import *",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 3,
+    "text": "from scipy.optimize import brentq",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 4,
+    "text": "import matplotlib; matplotlib.use('Agg')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 5,
+    "text": "import matplotlib.pyplot as plt",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 6,
+    "text": "OUT='results/'",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 7,
+    "text": "TRN_N=('run_N_1.csv',); TST_N=('run_N_2.csv',)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 8,
+    "text": "TRN_S=('run_1_r1.csv',); TST_S=('run_1_r2.csv','run_1_r3.csv')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 9,
+    "text": "TST_S2=('run_2_r2.csv','run_2_r3.csv')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 10,
+    "text": "# ---- adaptive config chosen on TRAIN (N_1, run_1_r1) ----",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 11,
+    "text": "def ema_sigma(q,tau_e):",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 12,
+    "text": "    t,x,tr,lvl=get('run_N_1.csv')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 13,
+    "text": "    class Probe:",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 14,
+    "text": "        def __init__(s): s.e=0;s.v=[]",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 15,
+    "text": "        def step(s): return 1.0",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 16,
+    "text": "        def update(s,nu,S): s.e+=DT/tau_e*(nu-s.e); s.v.append(s.e)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 17,
+    "text": "    pr=Probe(); kalman(x,q,R_KF,qfun=pr); v=np.array(pr.v); return v[t>10].std()",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 18,
+    "text": "AQ=dict(q=3e-4,tau_e=1.0,z0=2.5,z1=3.5,ratio=5000.,tau_dec=3.0); AQ['sig0']=ema_sigma(AQ['q'],AQ['tau_e'])",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 19,
+    "text": "s_ad=noise_sigma('akf',names=TRN_N,**AQ)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 20,
+    "text": "# ---- matched-noise baselines on TRAIN ----",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 21,
+    "text": "fc_m=brentq(lambda f:noise_sigma('lp',names=TRN_N,fc=f)-s_ad,0.03,0.3)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 22,
+    "text": "q_m=np.exp(brentq(lambda lq:noise_sigma('kf',names=TRN_N,q=np.exp(lq))-s_ad,np.log(1e-5),np.log(1e-2)))",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 23,
+    "text": "print('train sigma adaptive %.3f -> LP fc=%.3f Hz, KF q=%.2e'%(s_ad,fc_m,q_m))",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 24,
+    "text": "methods={",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 25,
+    "text": " 'Lab 3: zero-phase LP (non-causal)':('zp',dict(fc=0.1)),",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 26,
+    "text": " 'Causal LP (matched noise)':('lp',dict(fc=fc_m)),",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 27,
+    "text": " 'Fixed-Q Kalman (matched noise)':('kf',dict(q=q_m)),",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 28,
+    "text": " 'Adaptive-Q Kalman':('akf',AQ),",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 29,
+    "text": "}",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 30,
+    "text": "res={}",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 31,
+    "text": "for name,(k,p) in methods.items():",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 32,
+    "text": "    r={}",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 33,
+    "text": "    r['sigma_train_N1']=noise_sigma(k,names=TRN_N,**p)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 34,
+    "text": "    r['sigma_test_N2']=noise_sigma(k,names=TST_N,**p)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 35,
+    "text": "    m,_=step_response(k,TST_S,**p); r['t90_large_s']=t90(m)[0]; r['rise10_90_s']=t90(m)[1]; r['overshoot_large']=overshoot(m)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 36,
+    "text": "    try:",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 37,
+    "text": "        m2,_=step_response(k,TST_S2,**p); r['t90_small_s']=t90(m2)[0]; r['overshoot_small']=overshoot(m2)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 38,
+    "text": "    except Exception as e: r['t90_small_s']=None",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 39,
+    "text": "    for mode in [1,2,3,4,5]:",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 40,
+    "text": "        r['rmse_run%d'%mode]=rmse(k,tuple('run_%d_r%d.csv'%(mode,i) for i in (2,3)),**p)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 41,
+    "text": "    res[name]=r",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 42,
+    "text": "    print(name); print({a:(round(b,3) if b is not None else None) for a,b in r.items()})",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 43,
+    "text": "json.dump(dict(AQ=AQ,fc_matched=fc_m,q_matched=q_m,results=res),open(OUT+'results.json','w'),indent=1)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 6,
+    "line": 44,
+    "text": "pickle.dump(res,open(OUT+'res.pkl','wb'))",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 1,
+    "text": "import sys,json,pickle,time; sys.path.insert(0,'.')",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 2,
+    "text": "from evalx import *",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 3,
+    "text": "from scipy.optimize import brentq",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 4,
+    "text": "OUT='results/'   # output folder",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 5,
+    "text": "",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 6,
+    "text": "def ema_sigma(q,tau_e,nname):",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 7,
+    "text": "    t,x,tr,lvl=get(nname)",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 8,
+    "text": "    class Probe:",
+    "pdf_page": 21
+  },
+  {
+    "listing": 7,
+    "line": 9,
+    "text": "        def __init__(s): s.e=0;s.v=[]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 10,
+    "text": "        def step(s): return 1.0",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 11,
+    "text": "        def update(s,nu,S): s.e+=DT/tau_e*(nu-s.e); s.v.append(s.e)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 12,
+    "text": "    pr=Probe(); kalman(x,q,R_KF,qfun=pr); return np.array(pr.v)[t>10].std()",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 13,
+    "text": "",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 14,
+    "text": "# ---------- grid of adaptive configs, evaluated on every run once ----------",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 15,
+    "text": "# sig0 (innovation scale) is a noise-only number; it is taken from the TRAINING noise run of each fold.",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 16,
+    "text": "N=['run_N_1.csv','run_N_2.csv']; S=['run_1_r1.csv','run_1_r2.csv','run_1_r3.csv']",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 17,
+    "text": "grid=[]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 18,
+    "text": "for q in [1e-4,3e-4,1e-3]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 19,
+    "text": "  for tau_e in [0.3,0.6,1.0]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 20,
+    "text": "    for z0 in [0.5,1.0,1.5,2.5]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 21,
+    "text": "      for dz in [1.0,2.0]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 22,
+    "text": "        for ratio in [100,1000,5000]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 23,
+    "text": "          for tdec in [1.0,3.0]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 24,
+    "text": "            grid.append((q,tau_e,z0,dz,ratio,tdec))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 25,
+    "text": "grid=grid[::2]          # every second config (keeps tau_dec = 1 s) -> 216 configs",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 26,
+    "text": "import os",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 27,
+    "text": "from multiprocessing import Pool",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 28,
+    "text": "def eval_cfg(args):",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 29,
+    "text": "    (q,tau_e,z0,dz,ratio,tdec),src=args",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 30,
+    "text": "    p=dict(q=q,tau_e=tau_e,z0=z0,z1=z0+dz,ratio=ratio,tau_dec=tdec,sig0=ema_sigma(q,tau_e,src))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 31,
+    "text": "    c=dict(p=p)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 32,
+    "text": "    for n in N: c['s_'+n]=noise_sigma('akf',names=(n,),**p)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 33,
+    "text": "    for n in S: c['r_'+n]=step_response('akf',(n,),**p)[0]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 34,
+    "text": "    return c",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 35,
+    "text": "CACHE=OUT+'cv_cache_clean.pkl'",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 36,
+    "text": "t0=time.time()",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 37,
+    "text": "if os.path.exists(CACHE): caches=pickle.load(open(CACHE,'rb'))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 38,
+    "text": "else:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 39,
+    "text": "    caches={}",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 40,
+    "text": "    with Pool(4) as pool:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 41,
+    "text": "        for src in N: caches[src]=pool.map(eval_cfg,[(g,src) for g in grid])",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 42,
+    "text": "    pickle.dump(caches,open(CACHE,'wb'))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 43,
+    "text": "print('grid done %.0f s'%(time.time()-t0),flush=True)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 44,
+    "text": "",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 45,
+    "text": "def t90_of(resps): return t90(np.mean(resps,0))[0]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 46,
+    "text": "def os_of(resps): return overshoot(np.mean(resps,0))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 47,
+    "text": "folds=[dict(name='A',trN='run_N_1.csv',teN='run_N_2.csv',trS=['run_1_r1.csv'],teS=['run_1_r2.csv','run_1_r3.csv'],teR=(2,3)),",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 48,
+    "text": "       dict(name='B',trN='run_N_2.csv',teN='run_N_1.csv',trS=['run_1_r2.csv'],teS=['run_1_r1.csv','run_1_r3.csv'],teR=(1,3))]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 49,
+    "text": "out={}",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 50,
+    "text": "for f in folds:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 51,
+    "text": "    # select: among configs whose TRAIN noise <= 1.5, minimise TRAIN t90",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 52,
+    "text": "    cand=[(t90_of([c['r_'+n] for n in f['trS']]),c) for c in caches[f['trN']] if c['s_'+f['trN']]<=1.5]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 53,
+    "text": "    t9,csel=min(cand,key=lambda a:a[0]); P=csel['p']; s_tr=csel['s_'+f['trN']]",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 54,
+    "text": "    # matched baselines on TRAIN noise",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 55,
+    "text": "    fc=brentq(lambda v:noise_sigma('lp',names=(f['trN'],),fc=v)-s_tr,0.002,1.5)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 56,
+    "text": "    qm=np.exp(brentq(lambda v:noise_sigma('kf',names=(f['trN'],),q=np.exp(v))-s_tr,np.log(1e-6),np.log(1e-1)))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 57,
+    "text": "    qr=np.exp(brentq(lambda v:noise_sigma('rts',names=(f['trN'],),q=np.exp(v))-s_tr,np.log(1e-9),np.log(1e2)))",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 58,
+    "text": "    fz=brentq(lambda v:noise_sigma('zp',names=(f['trN'],),fc=v)-s_tr,0.002,1.5)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 59,
+    "text": "    meths={'zero-phase LP (non-causal)':('zp',dict(fc=fz)),'Kalman+RTS (non-causal)':('rts',dict(q=qr)),",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 60,
+    "text": "           'causal LP':('lp',dict(fc=fc)),'fixed-Q Kalman':('kf',dict(q=qm)),'adaptive-Q Kalman':('akf',P)}",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 61,
+    "text": "    fo={'selected':P,'train_sigma':s_tr,'train_t90':t9,'fc':fc,'q_kf':qm,'q_rts':qr,'fc_zp':fz,'methods':{}}",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 62,
+    "text": "    for name,(k,p) in meths.items():",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 63,
+    "text": "        r={}",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 64,
+    "text": "        r['sigma_test']=noise_sigma(k,names=(f['teN'],),**p)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 65,
+    "text": "        m,_=step_response(k,tuple(f['teS']),**p); r['t90']=t90(m)[0]; r['os']=overshoot(m)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 66,
+    "text": "        for mode in [1,2,3,4,5]:",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 67,
+    "text": "            r['rmse%d'%mode]=rmse(k,tuple('run_%d_r%d.csv'%(mode,i) for i in f['teR']),**p)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 68,
+    "text": "        fo['methods'][name]=r",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 69,
+    "text": "    out[f['name']]=fo",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 70,
+    "text": "    print('fold',f['name'],'sel',P,'train sigma %.2f t90 %.2f'%(s_tr,t9),flush=True)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 71,
+    "text": "    for name,r in fo['methods'].items(): print('  %-28s'%name,{a:round(float(b),2) for a,b in r.items()},flush=True)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 72,
+    "text": "json.dump(out,open(OUT+'cv_results.json','w'),indent=1,default=float)",
+    "pdf_page": 22
+  },
+  {
+    "listing": 7,
+    "line": 73,
+    "text": "print('ALL DONE',time.time()-t0,flush=True)",
+    "pdf_page": 22
+  }
+]
